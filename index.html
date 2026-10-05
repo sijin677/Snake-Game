@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Snake</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<style>
+  /* Layout: one centered handheld — LCD screen on top, readout + d-pad below. Single deliberate look (monochrome LCD). */
+  :root {
+    --case: #2b2f2a;
+    --case-edge: #1c1f1b;
+    --lcd: #9fae7c;
+    --lcd-shade: #93a271;
+    --pixel: #1f2a14;
+    --pixel-faint: rgba(31, 42, 20, 0.12);
+    --label: #c9cfbf;
+    --key: #3a4038;
+    --font-display: "Silkscreen", ui-monospace, monospace;
+    --font-body: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    color-scheme: dark;
+  }
+  html, body { height: 100%; }
+  body {
+    background: var(--case-edge);
+    color: var(--label);
+    font-family: var(--font-body);
+    display: flex; align-items: center; justify-content: center;
+    padding-inline: 16px; padding-block: 16px;
+    box-sizing: border-box;
+    -webkit-user-select: none; user-select: none;
+    touch-action: manipulation;
+  }
+  .device {
+    width: 100%; max-width: 440px;
+    background: var(--case);
+    border-radius: 22px 22px 48px 22px;
+    padding: 20px;
+    box-sizing: border-box;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 20px 40px rgba(0,0,0,0.4);
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .bezel {
+    background: var(--case-edge);
+    border-radius: 10px;
+    padding: 12px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .hud {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-family: var(--font-display);
+    font-size: 13px; letter-spacing: 0.06em;
+    color: var(--label);
+    font-variant-numeric: tabular-nums;
+  }
+  .screen { position: relative; }
+  canvas {
+    display: block; width: 100%; max-width: 100%; aspect-ratio: 1;
+    background: var(--lcd);
+    border-radius: 4px;
+    image-rendering: pixelated;
+  }
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    color: var(--pixel);
+    text-align: center;
+    pointer-events: none;
+  }
+  .overlay h1 {
+    margin: 0; font-family: var(--font-display); font-weight: 700;
+    font-size: clamp(28px, 9vw, 44px); letter-spacing: 0.04em;
+  }
+  .overlay p { margin: 0; font-size: 13px; font-weight: 600; }
+  .controls {
+    display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  }
+  .brand { font-family: var(--font-display); font-size: 12px; letter-spacing: 0.12em; color: var(--label); opacity: 0.7; }
+  .dpad {
+    display: grid; grid-template-columns: repeat(3, 48px); grid-template-rows: repeat(3, 48px); gap: 4px;
+  }
+  .dpad button, .action {
+    background: var(--key); color: var(--label);
+    border: 0; border-radius: 10px;
+    font-family: var(--font-display); font-size: 16px;
+    cursor: pointer;
+    box-shadow: 0 3px 0 var(--case-edge);
+  }
+  .dpad button:active, .action:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--case-edge); }
+  .dpad button:focus-visible, .action:focus-visible { outline: 2px solid var(--lcd); outline-offset: 2px; }
+  .up { grid-column: 2; grid-row: 1; }
+  .left { grid-column: 1; grid-row: 2; }
+  .right { grid-column: 3; grid-row: 2; }
+  .down { grid-column: 2; grid-row: 3; }
+  .side { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+  .action { padding: 12px 18px; font-size: 13px; letter-spacing: 0.08em; }
+  .help { font-size: 12px; line-height: 1.5; opacity: 0.75; margin: 0; max-width: 22ch; }
+</style>
+
+<div class="device">
+  <div class="bezel">
+    <div class="hud">
+      <span>SCORE <span id="score">0000</span></span>
+      <span>BEST <span id="best">0000</span></span>
+    </div>
+    <div class="screen">
+      <canvas id="board" width="400" height="400" aria-label="Snake board"></canvas>
+      <div class="overlay" id="overlay">
+        <h1>SNAKE</h1>
+        <p id="msg">Press Space or tap Start</p>
+      </div>
+    </div>
+  </div>
+  <div class="controls">
+    <div class="side">
+      <span class="brand">POCKET·LCD</span>
+      <button class="action" id="startBtn" type="button">START</button>
+      <p class="help">Arrows / WASD to steer. Space to pause. Swipe on the screen works too.</p>
+    </div>
+    <div class="dpad" aria-label="Direction pad">
+      <button class="up" type="button" data-dir="up" aria-label="Up">▲</button>
+      <button class="left" type="button" data-dir="left" aria-label="Left">◀</button>
+      <button class="right" type="button" data-dir="right" aria-label="Right">▶</button>
+      <button class="down" type="button" data-dir="down" aria-label="Down">▼</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const N = 20;
+  const canvas = document.getElementById('board');
+  const ctx = canvas.getContext('2d');
+  const C = canvas.width / N;
+  const css = getComputedStyle(document.documentElement);
+  const PIXEL = css.getPropertyValue('--pixel').trim();
+  const FAINT = css.getPropertyValue('--pixel-faint').trim();
+  const LCD = css.getPropertyValue('--lcd').trim();
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const overlay = document.getElementById('overlay');
+  const msg = document.getElementById('msg');
+  const startBtn = document.getElementById('startBtn');
+
+  const DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  const pad = n => String(n).padStart(4, '0');
+
+  let best = 0;
+  try { best = +localStorage.getItem('snake-best') || 0; } catch (e) {}
+  bestEl.textContent = pad(best);
+
+  let snake, dir, queue, food, score, state, stepMs, timer, lastStep;
+
+  function reset() {
+    snake = [[9, 10], [8, 10], [7, 10]];
+    dir = 'right'; queue = [];
+    score = 0; stepMs = 130;
+    scoreEl.textContent = pad(0);
+    placeFood();
+  }
+
+  function placeFood() {
+    const free = [];
+    for (let x = 0; x < N; x++) for (let y = 0; y < N; y++)
+      if (!snake.some(s => s[0] === x && s[1] === y)) free.push([x, y]);
+    food = free[Math.floor(Math.random() * free.length)];
+  }
+
+  function turn(d) {
+    if (state === 'over') { reset(); state = 'ready'; }
+    const last = queue.length ? queue[queue.length - 1] : dir;
+    const [lx, ly] = DIRS[last], [nx, ny] = DIRS[d];
+    if (lx + nx === 0 && ly + ny === 0) return;
+    if (d === last || queue.length > 2) return;
+    queue.push(d);
+    if (state === 'ready' || state === 'over') start();
+  }
+
+  function step() {
+    if (queue.length) dir = queue.shift();
+    const [dx, dy] = DIRS[dir];
+    const head = [snake[0][0] + dx, snake[0][1] + dy];
+    const eating = food && head[0] === food[0] && head[1] === food[1];
+    const body = eating ? snake : snake.slice(0, -1);
+    if (head[0] < 0 || head[1] < 0 || head[0] >= N || head[1] >= N ||
+        body.some(s => s[0] === head[0] && s[1] === head[1])) return gameOver();
+    snake.unshift(head);
+    if (eating) {
+      score += 10;
+      scoreEl.textContent = pad(score);
+      stepMs = Math.max(60, stepMs - 3);
+      if (snake.length === N * N) return gameOver(true);
+      placeFood();
+    } else snake.pop();
+  }
+
+  function loop(t) {
+    if (state !== 'playing') return;
+    if (t - lastStep >= stepMs) { lastStep = t; step(); }
+    draw();
+    timer = requestAnimationFrame(loop);
+  }
+
+  function start() {
+    if (state === 'over') reset();
+    state = 'playing';
+    overlay.hidden = true;
+    startBtn.textContent = 'PAUSE';
+    lastStep = performance.now();
+    cancelAnimationFrame(timer);
+    timer = requestAnimationFrame(loop);
+  }
+
+  function pause() {
+    state = 'paused';
+    cancelAnimationFrame(timer);
+    overlay.hidden = false;
+    overlay.querySelector('h1').textContent = 'PAUSED';
+    msg.textContent = 'Press Space to resume';
+    startBtn.textContent = 'RESUME';
+  }
+
+  function gameOver(won) {
+    state = 'over';
+    cancelAnimationFrame(timer);
+    draw();
+    if (score > best) {
+      best = score; bestEl.textContent = pad(best);
+      try { localStorage.setItem('snake-best', best); } catch (e) {}
+    }
+    overlay.hidden = false;
+    overlay.querySelector('h1').textContent = won ? 'YOU WIN' : 'GAME OVER';
+    msg.textContent = 'Score ' + score + ' · Space to play again';
+    startBtn.textContent = 'RETRY';
+  }
+
+  function toggle() { state === 'playing' ? pause() : start(); }
+
+  function cell(x, y, inset) {
+    ctx.fillRect(x * C + inset, y * C + inset, C - inset * 2, C - inset * 2);
+  }
+
+  function draw() {
+    ctx.fillStyle = LCD;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = FAINT;
+    for (let x = 0; x < N; x++) for (let y = 0; y < N; y++) cell(x, y, 1);
+    ctx.fillStyle = PIXEL;
+    snake.forEach(([x, y], i) => cell(x, y, i === 0 ? 0.5 : 1.5));
+    if (food) {
+      const [fx, fy] = food, m = C / 2;
+      ctx.beginPath();
+      ctx.moveTo(fx * C + m, fy * C + 3); ctx.lineTo(fx * C + C - 3, fy * C + m);
+      ctx.lineTo(fx * C + m, fy * C + C - 3); ctx.lineTo(fx * C + 3, fy * C + m);
+      ctx.fill();
+    }
+  }
+
+  const KEYS = {
+    ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+    w: 'up', s: 'down', a: 'left', d: 'right', W: 'up', S: 'down', A: 'left', D: 'right'
+  };
+  document.addEventListener('keydown', e => {
+    if (KEYS[e.key]) { e.preventDefault(); if (state !== 'paused') turn(KEYS[e.key]); }
+    else if (e.key === ' ' || e.key === 'p' || e.key === 'P') { e.preventDefault(); toggle(); }
+  });
+  startBtn.addEventListener('click', toggle);
+  document.querySelectorAll('.dpad button').forEach(b =>
+    b.addEventListener('pointerdown', e => { e.preventDefault(); if (state !== 'paused') turn(b.dataset.dir); }));
+
+  let touch = null;
+  canvas.addEventListener('touchstart', e => { touch = e.touches[0]; }, { passive: true });
+  canvas.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  canvas.addEventListener('touchend', e => {
+    if (!touch) return;
+    const t = e.changedTouches[0], dx = t.clientX - touch.clientX, dy = t.clientY - touch.clientY;
+    touch = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) { if (state !== 'playing') toggle(); return; }
+    if (state !== 'paused') turn(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up'));
+  });
+
+  document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'playing') pause(); });
+
+  reset();
+  state = 'ready';
+  draw();
+})();
+</script>
+</body>
+</html>
